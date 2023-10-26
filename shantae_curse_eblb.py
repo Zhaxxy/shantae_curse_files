@@ -74,7 +74,18 @@ class EblbObject(NamedTuple):
 
     def to_bytes(self, underworld_types: list[str]) -> bytes:
         underworld_type_index = underworld_types.index(self.underworld_type) + 1
-        return struct.pack('<H2h2?4BhiBB',underworld_type_index,*self[1:],0,0)
+        return struct.pack('<H2h2?4BhiBB',underworld_type_index,
+                        self.x_location,
+                        self.y_location,
+                        self.unknown_bool6,
+                        self.unknown_bool7,
+                        self.unknown_char8,
+                        self.unknown_char9,
+                        self.unknown_chara,
+                        self.unknown_charb,
+                        self.unknown_shortc,
+                        self.unknown_inte,
+                        0,0)
 
 
 class EntranceAndOrExit(NamedTuple):
@@ -229,6 +240,7 @@ class ShantaeCurseEblb:
 
         default_colours =  {
                 0:  (0, 0, 0),      # Black
+                1:  (230, 230, 250),# lavender
                 3:  (128, 0, 128),  # Purple
                 7:  (0, 128, 128),
                 9:  (255, 165, 0),  # Orange
@@ -274,3 +286,13 @@ class ShantaeCurseEblb:
         if draw_camera_border:
             draw.rectangle(self.camera_bbox(layout_look.size),outline=(255,255,255))
         return layout_look
+
+
+def main():
+    with open('IB_04.eblb','rb') as f:
+        sc = ShantaeCurseEblb.from_eblb_file(f)
+    
+    sc.image_layout().save('wat.png')
+
+if __name__ == '__main__':
+    main()
