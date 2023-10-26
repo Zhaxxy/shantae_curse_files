@@ -57,7 +57,7 @@ class EblbObject(NamedTuple):
         if entry[18] + entry[19]:
             raise ShantaeCurseEblbBadData('Invalid padding bytes, possibly wrong bytes passed into')
         
-        underworld_type_index, x_location, y_location, unknown_bool6, unknown_bool7, unknown_char8, unknown_char9, unknown_chara, unknown_charb, unknown_shortc, unknown_inte,_,_ = struct.unpack('<H2h2?4BhiBB',entry)
+        underworld_type_index, x_location, y_location, unknown_bool6, unknown_bool7, unknown_char8, unknown_char9, unknown_chara, unknown_charb, unknown_shortc, unknown_inte,_,_ = struct.unpack('<H2h2?4BhIBB',entry)
         underworld_type = underworld_types[underworld_type_index - 1]
         return cls(underworld_type = underworld_type, 
                     x_location = x_location, 
@@ -74,7 +74,7 @@ class EblbObject(NamedTuple):
 
     def to_bytes(self, underworld_types: list[str]) -> bytes:
         underworld_type_index = underworld_types.index(self.underworld_type) + 1
-        return struct.pack('<H2h2?4BhiBB',underworld_type_index,
+        return struct.pack('<H2h2?4BhIBB',underworld_type_index,
                         self.x_location,
                         self.y_location,
                         self.unknown_bool6,
