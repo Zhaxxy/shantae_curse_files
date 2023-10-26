@@ -1,7 +1,7 @@
 from typing import ClassVar, Annotated, Sequence, NamedTuple, Callable
 from io import BytesIO
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 from PIL import Image, ImageDraw
 
@@ -200,7 +200,19 @@ class ShantaeCurseEblb:
         for row in self.tiles:
             if not len(row) == len(self.tiles[0]):
                 raise ShantaeCurseEblbBadData('Invalid 2d tiles')
-
+    
+    @classmethod
+    def from_dict(cls,json_dict: dict):
+        json_dict['objects'] = [EblbObject(**x) for x in json_dict['objects']]
+        json_dict['doors'] = [EntranceAndOrExit(**x) for x in json_dict['doors']]
+        return cls(**json_dict)
+        
+    def to_dict(self):
+        json_dict = asdict(self)
+        json_dict['objects'] = [x._asdict() for x in self.objects]
+        json_dict['doors'] = [x._asdict() for x in self.doors]
+        return json_dict
+        
     def __bytes__(self) -> bytes:
         self.check_eblb()
         eblb_file = BytesIO()
@@ -293,6 +305,11 @@ def main():
         sc = ShantaeCurseEblb.from_eblb_file(f)
     
     sc.image_layout().save('wat.png')
+
+    import json
+    
+    with open('ass.json','w') as f:
+        json.dump(sc.to_dict(),f, indent=4)
 
 if __name__ == '__main__':
     main()
