@@ -1,4 +1,4 @@
-from typing import ClassVar, Annotated, Sequence, NamedTuple, Callable
+from typing import ClassVar, Annotated, Sequence, Callable, Final
 from io import BytesIO
 import struct
 from dataclasses import dataclass, asdict
@@ -6,9 +6,10 @@ from dataclasses import dataclass, asdict
 from PIL import Image, ImageDraw
 
 
-SAVE_ENTRANCE_ID = 0x32
+SAVE_ENTRANCE_ID: Final[int] = 0x32
+UNDERWORLD_TYPES_TYP: Final[str] = 'UNDERWORLD_TYPES_TYP'
 
-class ShantaeCurseEblbParsingError(Exception):
+class ShantaeCurseEblbParsingError(struct.error):
     """Error to raise if we fail to parse a eblb file, most likley a bad file given"""
 
 
@@ -23,8 +24,8 @@ def get_padding(strings: Sequence[str]) -> bytes:
         return b'\x00' * (4 - pad_amnt)
     return b''
 
-
-class EblbObject(NamedTuple):
+@dataclass(slots=True,frozen=True)
+class EblbObject:
     underworld_type: str
     x_location: int
     y_location: int
@@ -37,7 +38,11 @@ class EblbObject(NamedTuple):
     unknown_charb: int
     unknown_shortc: int
     unknown_inte: int
-
+    
+    def __post_init__(self):
+        if self.underworld_type == UNDERWORLD_TYPES_TYP:
+            raise ShantaeCurseEblbParsingError(f'You can\'t have a {UNDERWORLD_TYPES_TYP} type')
+    
     def bbox(self,image_size: tuple = None):
         X_LENGTH = 16
         Y_LENGTH = 32
@@ -58,7 +63,7 @@ class EblbObject(NamedTuple):
             raise ShantaeCurseEblbBadData('Invalid padding bytes, possibly wrong bytes passed into')
         
         underworld_type_index, x_location, y_location, unknown_bool6, unknown_bool7, unknown_char8, unknown_char9, unknown_chara, unknown_charb, unknown_shortc, unknown_inte,_,_ = struct.unpack('<H2h2?4BhIBB',entry)
-        underworld_type = underworld_types[underworld_type_index - 1]
+        underworld_type = underworld_types[underworld_type_index]
         return cls(underworld_type = underworld_type, 
                     x_location = x_location, 
                     y_location = y_location,
@@ -73,22 +78,16 @@ class EblbObject(NamedTuple):
                     )
 
     def to_bytes(self, underworld_types: list[str]) -> bytes:
-        underworld_type_index = underworld_types.index(self.underworld_type) + 1
-        return struct.pack('<H2h2?4BhIBB',underworld_type_index,
-                        self.x_location,
-                        self.y_location,
-                        self.unknown_bool6,
-                        self.unknown_bool7,
-                        self.unknown_char8,
-                        self.unknown_char9,
-                        self.unknown_chara,
-                        self.unknown_charb,
-                        self.unknown_shortc,
-                        self.unknown_inte,
-                        0,0)
+        return struct.pack('<H2h2?4BhI',underworld_types.index(self.underworld_type),
+                        self.x_location, self.y_location,
+                        self.unknown_bool6, self.unknown_bool7,
+                        self.unknown_char8, self.unknown_char9, 
+                        self.unknown_chara, self.unknown_charb, 
+                        self.unknown_shortc, self.unknown_inte,) + b'\x00\x00'
 
 
-class EntranceAndOrExit(NamedTuple):
+@dataclass(slots=True,frozen=True)
+class EntranceAndOrExit:
     x1: int
     y1: int
     x2: int
@@ -133,8 +132,6 @@ class EntranceAndOrExit(NamedTuple):
 
 @dataclass(slots=True)
 class ShantaeCurseEblb:
-    UNDERWORLD_TYPES_TYP: ClassVar[bytes] = b'UNDERWORLD_TYPES_TYP\x00'
-
     objects: list[EblbObject]
     doors: list[EntranceAndOrExit]
     camera_x1: int
@@ -147,30 +144,23 @@ class ShantaeCurseEblb:
     def from_eblb_file(cls, eblb_file: BytesIO):
         eblb_file.seek(0)
         objects_count, unknown_short, doors_count, underworld_types_count, tiles_x, tiles_y = struct.unpack('<4H2I',eblb_file.read(0x10))
-        self_objects = []
-        self_doors = []
-
+        
         if unknown_short != 1:
             raise ShantaeCurseEblbParsingError(f'it should be 1, not {unknown_short}')
 
-        if not eblb_file.read(len(cls.UNDERWORLD_TYPES_TYP)) == cls.UNDERWORLD_TYPES_TYP:
+        underworld_types = [b''.join(iter(lambda: eblb_file.read(1),b'\x00')).decode('ascii') for _ in range(underworld_types_count + 1)]
+        if underworld_types[0] != UNDERWORLD_TYPES_TYP:
             raise ShantaeCurseEblbParsingError('There was no UNDERWORLD_TYPES_TYP string')
 
-        underworld_types = []
-        for _ in range(underworld_types_count):
-            new_string = b''.join(iter(lambda: eblb_file.read(1),b'\x00'))
-            underworld_types.append(new_string.decode('ascii'))
-
-        eblb_file.seek(len(get_padding([cls.UNDERWORLD_TYPES_TYP.removesuffix(b'\x00').decode('ascii')] + underworld_types)),1)
-
-        for _ in range(objects_count):
-            self_objects.append(EblbObject.from_bytes(eblb_file.read(0x14),underworld_types))
+        eblb_file.seek(len(get_padding(underworld_types)),1)
+        self_objects = [EblbObject.from_bytes(eblb_file.read(0x14),underworld_types) for _ in range(objects_count)]
 
         self_camera_x1, self_camera_y1, self_camera_x2, self_camera_y2, unknown_int_should_be_0 = struct.unpack('<5i',eblb_file.read(0x14))
 
         if unknown_int_should_be_0:
             raise ShantaeCurseEblbParsingError(f'it should be 0, not {unknown_int_should_be_0}!')
-
+        
+        self_doors = []
         for _ in range(doors_count):
             door_bytes = eblb_file.read(0x1c)
             exit_scene_name = b''.join(iter(lambda: eblb_file.read(1),b'\x00')).decode('ascii')
@@ -178,7 +168,7 @@ class ShantaeCurseEblb:
             self_doors.append(EntranceAndOrExit.from_bytes(door_bytes,exit_scene_name))
         
         self_tiles = eblb_file.read()
-        if not len(self_tiles) == tiles_x * tiles_y:
+        if len(self_tiles) != tiles_x * tiles_y:
             raise ShantaeCurseEblbBadData('The tiles does not match the dimension')
         self_tiles = [list(self_tiles[i:i+tiles_x]) for i in range(0, len(self_tiles), tiles_x)]
         
@@ -198,7 +188,7 @@ class ShantaeCurseEblb:
 
     def check_eblb(self):
         for row in self.tiles:
-            if not len(row) == len(self.tiles[0]):
+            if len(row) != len(self.tiles[0]):
                 raise ShantaeCurseEblbBadData('Invalid 2d tiles')
     
     @classmethod
@@ -207,23 +197,16 @@ class ShantaeCurseEblb:
         json_dict['doors'] = [EntranceAndOrExit(**x) for x in json_dict['doors']]
         return cls(**json_dict)
         
-    def to_dict(self):
-        json_dict = asdict(self)
-        json_dict['objects'] = [x._asdict() for x in self.objects]
-        json_dict['doors'] = [x._asdict() for x in self.doors]
-        return json_dict
-        
     def __bytes__(self) -> bytes:
         self.check_eblb()
         eblb_file = BytesIO()
-        underworld_types = list({entry.underworld_type for entry in self.objects})
+        underworld_types = [UNDERWORLD_TYPES_TYP] + list({entry.underworld_type for entry in self.objects})
         
-        eblb_file.write(struct.pack('<4H2I',len(self.objects), 1, len(self.doors), len(underworld_types), len(self.tiles[0]), len(self.tiles)))
+        eblb_file.write(struct.pack('<4H2I',len(self.objects), 1, len(self.doors), len(underworld_types)-1, len(self.tiles[0]), len(self.tiles)))
         eblb_file.write(
-                    self.UNDERWORLD_TYPES_TYP +
                     b'\x00'.join(string.encode('ascii') for string in underworld_types) + 
                     b'\x00' + 
-                    get_padding([self.UNDERWORLD_TYPES_TYP.removesuffix(b'\x00').decode('ascii')] + underworld_types)
+                    get_padding(underworld_types)
                     )
 
 
@@ -298,18 +281,3 @@ class ShantaeCurseEblb:
         if draw_camera_border:
             draw.rectangle(self.camera_bbox(layout_look.size),outline=(255,255,255))
         return layout_look
-
-
-def main():
-    with open('IB_04.eblb','rb') as f:
-        sc = ShantaeCurseEblb.from_eblb_file(f)
-    
-    sc.image_layout().save('wat.png')
-
-    import json
-    
-    with open('ass.json','w') as f:
-        json.dump(sc.to_dict(),f, indent=4)
-
-if __name__ == '__main__':
-    main()
