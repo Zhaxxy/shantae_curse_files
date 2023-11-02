@@ -132,13 +132,16 @@ class EntranceAndOrExit:
 
 @dataclass(slots=True)
 class ShantaeCurseEblb:
-    objects: list[EblbObject]
-    doors: list[EntranceAndOrExit]
     camera_x1: int
     camera_y1: int
     camera_x2: int
     camera_y2: int
+    objects: list[EblbObject]
+    doors: list[EntranceAndOrExit]
     tiles: list[list[int]]
+    
+    def __post_init__(self):
+        self.check_eblb()
     
     @classmethod
     def from_eblb_file(cls, eblb_file: BytesIO):
@@ -150,7 +153,7 @@ class ShantaeCurseEblb:
 
         underworld_types = [b''.join(iter(lambda: eblb_file.read(1),b'\x00')).decode('ascii') for _ in range(underworld_types_count + 1)]
         if underworld_types[0] != UNDERWORLD_TYPES_TYP:
-            raise ShantaeCurseEblbParsingError('There was no UNDERWORLD_TYPES_TYP string')
+            raise ShantaeCurseEblbParsingError(f'There was no {UNDERWORLD_TYPES_TYP} string')
 
         eblb_file.seek(len(get_padding(underworld_types)),1)
         self_objects = [EblbObject.from_bytes(eblb_file.read(0x14),underworld_types) for _ in range(objects_count)]
