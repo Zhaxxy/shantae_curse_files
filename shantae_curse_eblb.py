@@ -229,9 +229,9 @@ class ShantaeCurseEblb:
                     draw_doors: bool | list[EntranceAndOrExit] = True,
                     draw_objects: bool | list[EblbObject] = True,
                     tiles_colour_dict: dict[int, tuple[int, int, int]] = None,
-                    draw_doors_function: None | Callable[[Image, EntranceAndOrExit], Image] = None,
-                    draw_object_function: None | Callable[[Image, EblbObject], Image] = None,
-                    ) -> Image:
+                    draw_doors_function: None | Callable[[Image.Image, EntranceAndOrExit], Image.Image] = None,
+                    draw_object_function: None | Callable[[Image.Image, EblbObject], Image.Image] = None,
+                    ) -> Image.Image:
         """A nice layout to see the level, this also has the correct dimesions to be the background image for the level"""
         self.check_eblb()
         layout_look = Image.new("RGB", (len(self.tiles[0]), len(self.tiles)))
